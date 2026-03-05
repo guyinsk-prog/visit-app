@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>호별 방문 관리</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body,#root{height:100%}
+    body{font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif;background:#F2F5FA}
+    button{-webkit-tap-highlight-color:transparent}
+    @keyframes dropDown  {from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes fadeIn    {from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+    @keyframes fadeInDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes spin      {to{transform:rotate(360deg)}}
+    @keyframes pulse     {0%,100%{opacity:1}50%{opacity:.35}}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+// ================================================================
+// 🔥 1단계: Firebase Console에서 프로젝트 만들고 아래 값 교체
+//
+// Firebase Console (https://console.firebase.google.com)
+//   → 프로젝트 만들기
+//   → 웹앱 추가 (</>)
+//   → 아래 firebaseConfig 값 교체
+//
+// Realtime Database 활성화:
+//   → 빌드 → Realtime Database → 데이터베이스 만들기
+//   → 규칙 탭 → 아래 규칙으로 교체 후 게시:
+//   {
+//     "rules": {
+//       ".read": true,
+//       ".write": true
+//     }
+//   }
+// ================================================================
+const firebaseConfig = {
+  apiKey:            "AIzaSyDDQZpedMFeTfKr3VTayzw5CukGKA8UzgM",
+  authDomain:        "area2026-4a24e.firebaseapp.com",
+  databaseURL:       "https://area2026-4a24e-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "area2026-4a24e",
+  storageBucket:     "area2026-4a24e.appspot.com",
+  messagingSenderId: "633436675047",
+  appId:             "1:633436675047:web:a3a0dc3b0cce1a81977b42"
+};
+
+const IS_CONFIGURED = firebaseConfig.apiKey !== "YOUR_API_KEY";
+if (IS_CONFIGURED) firebase.initializeApp(firebaseConfig);
+</script>
+
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+// ── 초기 데이터 ───────────────────────────────────────────────
+const INITIAL_DATA = {
+  id:"campaign-001", stepNumber:2, label:"호별 방문", complexName:"고덕리엔 2",
+  addresses:[
+    {name:"리엔타운", address:"서울 강동구 상일로12길 89 (우: 05285)"},
+    {name:"고덕리엔", address:"서울 강동구 상일로 74 (우: 05287)"},
+  ],
+  buildings:[
+    {id:"b1",name:"리엔타운",dong:"1동",bookmarked:true, doneDate:null,units:[
+      {id:"u1", number:"201",status:"unvisited", memo:"",contact:null},
+      {id:"u2", number:"301",status:"visited",   memo:"부재중",contact:null},
+      {id:"u3", number:"401",status:"interested",memo:"재방문 요청",contact:"010-1234-5678"},
+    ]},
+    {id:"b2",name:"리엔타운",dong:"2동",bookmarked:false,doneDate:null,units:[
+      {id:"u4", number:"101",status:"unvisited",memo:"",contact:null},
+      {id:"u5", number:"201",status:"rejected", memo:"거절",contact:null},
+      {id:"u6", number:"301",status:"unvisited",memo:"",contact:null},
+    ]},
+    {id:"b3",name:"리엔타운",dong:"3동",bookmarked:false,doneDate:null,units:[
+      {id:"u7", number:"101",status:"unvisited", memo:"",contact:null},
+      {id:"u8", number:"201",status:"visited",   memo:"",contact:null},
+      {id:"u9", number:"301",status:"unvisited", memo:"",contact:null},
+      {id:"u10",number:"401",status:"interested",memo:"연락 예정",contact:"010-2345-6789"},
+    ]},
+    {id:"b4",name:"리엔타운",dong:"4동",bookmarked:false,doneDate:null,units:[
+      {id:"u11",number:"101",status:"unvisited",memo:"",contact:null},
+      {id:"u12",number:"201",status:"unvisited",memo:"",contact:null},
+      {id:"u13",number:"301",status:"visited",  memo:"내일 재방문",contact:null},
+      {id:"u14",number:"401",status:"unvisited",memo:"",contact:null},
+    ]},
+    {id:"b5",name:"고덕리엔",dong:"5동",bookmarked:false,doneDate:null,units:[
+      {id:"u15",number:"102",status:"unvisited", memo:"",contact:null},
+      {id:"u16",number:"202",status:"interested",memo:"적극 관심",contact:"010-3456-7890"},
+      {id:"u17",number:"302",status:"unvisited", memo:"",contact:null},
+      {id:"u18",number:"402",status:"rejected",  memo:"문전박대",contact:null},
+    ]},
+    {id:"b6",name:"고덕리엔",dong:"6동",bookmarked:false,doneDate:null,units:[
+      {id:"u19",number:"102",status:"unvisited",memo:"",contact:null},
+      {id:"u20",number:"202",status:"visited",  memo:"부재중 2회",contact:null},
+      {id:"u21",number:"302",status:"unvisited",memo:"",contact:null},
+    ]},
+    {id:"b7",name:"고덕리엔",dong:"7동",bookmarked:false,doneDate:null,units:[
+      {id:"u22",number:"101",status:"unvisited", memo:"",contact:null},
+      {id:"u23",number:"201",status:"unvisited", memo:"",contact:null},
+      {id:"u24",number:"301",status:"interested",memo:"주말 방문 요청",contact:"010-4567-8901"},
+      {id:"u25",number:"401",status:"unvisited", memo:"",contact:null},
+      {id:"u26",number:"501",status:"visited",   memo:"",contact:null},
+    ]},
+    {id:"b8",name:"고덕리엔",dong:"8동",bookmarked:false,doneDate:null,units:[
+      {id:"u27",number:"101",status:"unvisited",memo:"",contact:null},
+      {id:"u28",number:"201",status:"unvisited",memo:"",contact:null},
+      {id:"u29",number:"301",status:"rejected", memo:"거절 명확",contact:null},
+      {id:"u30",number:"401",status:"unvisited",memo:"",contact:null},
+    ]},
+  ],
+};
+
+const STATUS_CONFIG = {
+  unvisited:  {label:"미방문",   color:"#C8CDD6", bg:"#F4F5F7"},
+  visited:    {label:"방문완료", color:"#4A90D9", bg:"#EBF4FF"},
+  interested: {label:"관심",     color:"#27AE60", bg:"#E8F8EF"},
+  rejected:   {label:"거절",     color:"#E74C3C", bg:"#FDEDEC"},
+};
+
+function todayStr(){
+  const d=new Date();
+  return d.getFullYear()+"."+String(d.getMonth()+1).padStart(2,"0")+"."+String(d.getDate()).padStart(2,"0");
+}
+
+// Firebase 경로
+const DB_ROOT = "visit-campaign-001";
+const dbRef = (path="") => firebase.database().ref(path ? `${DB_ROOT}/${path}` : DB_ROOT);
+
+// ── UnitRow ───────────────────────────────────────────────────
+function UnitRow({unit, buildingId, onUpdate, openDropdownId, setOpenDropdownId}){
+  const cfg = STATUS_CONFIG[unit.status];
+  const isOpen = openDropdownId === unit.id;
+  const btnRef = useRef(null);
+  const [dropPos, setDropPos] = useState({top:0,right:0});
+  const [expanded, setExpanded] = useState(false);
+  const [memoText, setMemoText] = useState(unit.memo||"");
+  useEffect(()=>{ setMemoText(unit.memo||""); },[unit.memo]);
+
+  const openDrop = e=>{
+    e.stopPropagation();
+    if(!isOpen && btnRef.current){
+      const r=btnRef.current.getBoundingClientRect();
+      const dh=4*48,tbh=64,mg=8;
+      const below=window.innerHeight-tbh-r.bottom, above=r.top;
+      const top=below>=dh?r.bottom+mg:above>=dh?r.top-dh-mg:Math.max(mg,window.innerHeight-tbh-dh-mg);
+      setDropPos({top, right:window.innerWidth-r.right});
+    }
+    setOpenDropdownId(isOpen?null:unit.id);
+  };
+
+  return(
+    <div style={{borderBottom:"1px solid #F0F2F5"}}>
+      <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"12px 0"}}>
+        <div onClick={()=>setExpanded(v=>!v)}
+          style={{display:"flex",alignItems:"flex-start",gap:10,flex:1,minWidth:0,cursor:"pointer",paddingTop:3}}>
+          <div style={{width:10,height:10,borderRadius:"50%",flexShrink:0,marginTop:4,background:cfg.color,boxShadow:`0 0 0 3px ${cfg.color}22`}}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:17,fontWeight:700,color:"#1A1D23",letterSpacing:"-0.3px"}}>{unit.number}</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={unit.memo?"#4A90D9":"#D0D5DE"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </div>
+            {unit.memo&&!expanded&&<p style={{fontSize:12,color:"#8A93A3",margin:"2px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{unit.memo}</p>}
+          </div>
+        </div>
+        <button ref={btnRef} onClick={openDrop} style={{
+          display:"flex",alignItems:"center",gap:4,padding:"4px 9px 4px 11px",borderRadius:20,cursor:"pointer",
+          border:`1.5px solid ${cfg.color}55`,background:cfg.bg,color:cfg.color,fontSize:11,fontWeight:700,flexShrink:0,
+        }}>
+          {cfg.label}
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{transform:isOpen?"rotate(180deg)":"rotate(0deg)",transition:"transform .2s"}}>
+            <path d="M2 4l4 4 4-4" stroke={cfg.color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      {isOpen&&(
+        <div onClick={e=>e.stopPropagation()} style={{
+          position:"fixed",top:dropPos.top,right:dropPos.right,
+          background:"white",borderRadius:14,boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
+          border:"1px solid #EEF0F5",zIndex:500,minWidth:136,overflow:"auto",
+          maxHeight:"calc(100vh - 80px)",animation:"dropDown .15s ease",
+        }}>
+          {Object.entries(STATUS_CONFIG).map(([key,c],idx,arr)=>(
+            <button key={key} onClick={()=>{onUpdate(buildingId,unit.id,{status:key});setOpenDropdownId(null);}} style={{
+              width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",
+              background:unit.status===key?c.bg:"white",border:"none",
+              borderBottom:idx<arr.length-1?"1px solid #F5F6F8":"none",cursor:"pointer",textAlign:"left",
+            }}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:c.color,flexShrink:0}}/>
+              <span style={{fontSize:13,fontWeight:unit.status===key?700:500,color:unit.status===key?c.color:"#3D4450"}}>{c.label}</span>
+              {unit.status===key&&<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{marginLeft:"auto"}}><path d="M2 6l3 3 5-5" stroke={c.color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {expanded&&(
+        <div onClick={e=>e.stopPropagation()} style={{margin:"0 0 14px 20px",padding:"12px",background:"#F8F9FB",borderRadius:12,border:"1.5px solid #E2E6ED",animation:"dropDown .15s ease"}}>
+          <p style={{fontSize:11,fontWeight:700,color:"#4A6FA5",margin:"0 0 8px"}}>✏️ 메모</p>
+          <textarea value={memoText} onChange={e=>setMemoText(e.target.value)} placeholder="메모를 입력하세요..." rows={3} autoFocus
+            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #D0D7E3",borderRadius:8,fontSize:13,color:"#3D4450",background:"white",resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
+            onFocus={e=>e.target.style.borderColor="#4A90D9"} onBlur={e=>e.target.style.borderColor="#D0D7E3"}
+          />
+          <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:8}}>
+            <button onClick={()=>{setMemoText(unit.memo||"");setExpanded(false);}} style={{padding:"6px 16px",borderRadius:8,fontSize:12,fontWeight:600,border:"1.5px solid #E2E6ED",background:"white",color:"#8A93A3",cursor:"pointer"}}>취소</button>
+            <button onClick={()=>{onUpdate(buildingId,unit.id,{memo:memoText});setExpanded(false);}} style={{padding:"6px 16px",borderRadius:8,fontSize:12,fontWeight:700,border:"none",background:"#1A3A6B",color:"white",cursor:"pointer"}}>저장</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── BuildingCard ──────────────────────────────────────────────
+function BuildingCard({building,onUnitUpdate,onToggleDone,onBookmark,openDropdownId,setOpenDropdownId,stackIndex}){
+  const [collapsed,setCollapsed]=useState(false);
+  const hasOpen=building.units.some(u=>u.id===openDropdownId);
+  const doneCount=building.units.filter(u=>u.status!=="unvisited").length;
+  const total=building.units.length;
+  const isDone=!!building.doneDate;
+  return(
+    <div style={{background:"white",borderRadius:16,boxShadow:"0 2px 12px rgba(0,0,0,0.07)",marginBottom:12,position:"relative",zIndex:hasOpen?100:stackIndex}}>
+      <div style={{padding:"14px 16px 0"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
+          <div onClick={()=>setCollapsed(v=>!v)} style={{cursor:"pointer"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:18,fontWeight:800,color:"#1A3A6B",letterSpacing:"-0.5px"}}>{building.name}</span>
+              <span style={{fontSize:14,fontWeight:600,color:"#4A6FA5"}}>{building.dong}</span>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform .2s ease",marginLeft:2}}>
+                <path d="M2 5l5 4 5-4" stroke="#A0AABB" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <p style={{fontSize:12,color:"#8A93A3",margin:"2px 0 0"}}>{doneCount}/{total} 완료</p>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <button onClick={e=>{e.stopPropagation();onToggleDone(building.id);}} style={{
+                display:"flex",alignItems:"center",gap:5,padding:"5px 12px 5px 10px",borderRadius:20,cursor:"pointer",
+                border:isDone?"1.5px solid #27AE6055":"1.5px solid #DDE1E9",
+                background:isDone?"#E8F8EF":"#F4F5F7",color:isDone?"#27AE60":"#8A93A3",fontSize:12,fontWeight:700,
+              }}>
+                {isDone?<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#27AE60" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                       :<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#B0B8C8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/></svg>}
+                {isDone?"완료":"미완료"}
+              </button>
+              <button onClick={e=>{e.stopPropagation();onBookmark(building.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:2}}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill={building.bookmarked?"#1A3A6B":"none"} stroke={building.bookmarked?"#1A3A6B":"#B0B8C8"} strokeWidth="2">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                </svg>
+              </button>
+            </div>
+            {isDone&&<span style={{fontSize:10,color:"#27AE60",fontWeight:600}}>{building.doneDate}</span>}
+          </div>
+        </div>
+        <div style={{height:5,background:"#EEF0F5",borderRadius:3,marginBottom:2}}>
+          <div style={{width:`${(doneCount/total)*100}%`,height:"100%",background:isDone?"#27AE60":"#4A90D9",borderRadius:3,transition:"width .3s ease"}}/>
+        </div>
+      </div>
+      {!collapsed&&(
+        <div style={{padding:"0 16px 4px"}}>
+          {building.units.map(unit=>(
+            <UnitRow key={unit.id} unit={unit} buildingId={building.id}
+              onUpdate={onUnitUpdate} openDropdownId={openDropdownId} setOpenDropdownId={setOpenDropdownId}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── NaverMap ──────────────────────────────────────────────────
+function NaverMap(){
+  const address="서울 강동구 상일로12길 89";
+  const handleClick=()=>{
+    window.location.href=`nmap://search?query=${encodeURIComponent(address)}&appname=com.visit.app`;
+    setTimeout(()=>window.open(`https://map.naver.com/p/search/${encodeURIComponent(address)}`,"_blank"),1500);
+  };
+  return(
+    <div onClick={handleClick} style={{borderRadius:16,overflow:"hidden",marginBottom:16,boxShadow:"0 2px 12px rgba(0,0,0,0.08)",cursor:"pointer"}}>
+      <div style={{width:"100%",height:155,background:"#DCE8F5",position:"relative",overflow:"hidden"}}>
+        <svg width="100%" height="100%" style={{position:"absolute",opacity:.18}}>
+          {[...Array(12)].map((_,i)=><line key={"h"+i} x1="0" y1={i*15} x2="100%" y2={i*15} stroke="#2C5FA8" strokeWidth="1"/>)}
+          {[...Array(24)].map((_,i)=><line key={"v"+i} x1={i*18} y1="0" x2={i*18} y2="100%" stroke="#2C5FA8" strokeWidth="1"/>)}
+        </svg>
+        <svg width="100%" height="100%" style={{position:"absolute"}}>
+          <rect x="0" y="62" width="100%" height="13" fill="#B8CCE8" rx="2" opacity=".7"/>
+          <rect x="138" y="0" width="13" height="100%" fill="#B8CCE8" rx="2" opacity=".7"/>
+        </svg>
+        <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-100%)",zIndex:3,filter:"drop-shadow(0 3px 6px rgba(0,0,0,.25))"}}>
+          <svg width="30" height="38" viewBox="0 0 36 44" fill="none">
+            <path d="M18 0C8.059 0 0 8.059 0 18c0 13.5 18 26 18 26S36 31.5 36 18C36 8.059 27.941 0 18 0z" fill="#1A3A6B"/>
+            <circle cx="18" cy="18" r="8" fill="white"/><circle cx="18" cy="18" r="5" fill="#1A3A6B"/>
+          </svg>
+        </div>
+        <div style={{position:"absolute",top:"calc(50% - 48px)",left:"50%",transform:"translateX(-50%)",background:"white",borderRadius:8,padding:"3px 10px",fontSize:11,fontWeight:700,color:"#1A3A6B",boxShadow:"0 2px 8px rgba(0,0,0,.15)",whiteSpace:"nowrap",zIndex:4}}>리엔타운</div>
+        <div style={{position:"absolute",bottom:8,right:8,background:"white",borderRadius:6,padding:"3px 7px",display:"flex",alignItems:"center",gap:3,boxShadow:"0 1px 6px rgba(0,0,0,.12)"}}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#03C75A"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
+          <span style={{fontSize:10,fontWeight:700,color:"#03C75A"}}>NAVER 지도</span>
+        </div>
+      </div>
+      <div style={{background:"white",padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderTop:"1px solid #EEF0F5"}}>
+        <div>
+          <p style={{fontSize:12,color:"#3D4450",fontWeight:600,margin:0}}>리엔타운</p>
+          <p style={{fontSize:11,color:"#8A93A3",margin:"2px 0 0"}}>{address}</p>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:4,background:"#F0FBF4",border:"1px solid #03C75A33",borderRadius:20,padding:"5px 12px"}}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#03C75A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span style={{fontSize:11,fontWeight:700,color:"#03C75A"}}>지도 열기</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────
+function App(){
+  const [data,    setData]    = useState(null);
+  const [fbStatus,setFbStatus]= useState("connecting"); // connecting|live|offline|demo
+  const [toast,   setToast]   = useState(null);
+  const [scrolled,setScrolled]= useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState(null);
+  const bodyRef    = useRef(null);
+  const isMine     = useRef(false); // 내가 쓴 변경은 echo 무시
+
+  const showToast = msg=>{ setToast(msg); setTimeout(()=>setToast(null),2200); };
+
+  // 스크롤
+  useEffect(()=>{
+    const el=bodyRef.current; if(!el) return;
+    const fn=()=>setScrolled(el.scrollTop>10);
+    el.addEventListener("scroll",fn); return ()=>el.removeEventListener("scroll",fn);
+  },[]);
+
+  // ── Firebase 연결 & 실시간 구독
+  useEffect(()=>{
+    if(!IS_CONFIGURED){
+      setData(INITIAL_DATA);
+      setFbStatus("demo");
+      return;
+    }
+
+    // 최초: 데이터 없으면 초기값 업로드
+    dbRef().once("value").then(snap=>{
+      if(!snap.exists()) dbRef().set(INITIAL_DATA);
+    });
+
+    // 실시간 수신 (buildings 경로만 구독)
+    const ref = dbRef("buildings");
+    const handler = ref.on("value", snap=>{
+      if(isMine.current){ isMine.current=false; return; } // 내 변경 echo 무시
+      if(snap.exists()){
+        const buildings = snap.val();
+        // Firebase는 배열을 객체로 저장하므로 변환
+        const arr = Array.isArray(buildings) ? buildings : Object.values(buildings);
+        setData(prev => prev
+          ? { ...prev, buildings: arr.map(b=>({...b, units: Array.isArray(b.units)?b.units:Object.values(b.units||{}) })) }
+          : { ...INITIAL_DATA, buildings: arr }
+        );
+      }
+      setFbStatus("live");
+    });
+
+    // 연결 상태
+    firebase.database().ref(".info/connected").on("value", snap=>{
+      setFbStatus(snap.val() ? "live" : "offline");
+    });
+
+    return ()=>{ ref.off("value", handler); };
+  },[]);
+
+  // ── Firebase에 단일 호 업데이트 (경로 지정으로 최소 데이터만 전송)
+  const pushUnit = (buildingIdx, unitIdx, fields) => {
+    if(!IS_CONFIGURED) return;
+    isMine.current = true;
+    const path = `buildings/${buildingIdx}/units/${unitIdx}`;
+    dbRef(path).update(fields);
+  };
+
+  const pushBuilding = (buildingIdx, fields) => {
+    if(!IS_CONFIGURED) return;
+    isMine.current = true;
+    dbRef(`buildings/${buildingIdx}`).update(fields);
+  };
+
+  const pushAllBuildings = (buildings) => {
+    if(!IS_CONFIGURED) return;
+    isMine.current = true;
+    dbRef("buildings").set(buildings);
+  };
+
+  // ── 핸들러
+  const handleUnitUpdate = (buildingId, unitId, fields) => {
+    setData(prev=>{
+      const bIdx = prev.buildings.findIndex(b=>b.id===buildingId);
+      const uIdx = prev.buildings[bIdx].units.findIndex(u=>u.id===unitId);
+      if(fields.status) showToast(STATUS_CONFIG[fields.status].label+" ✓");
+      if(fields.memo!==undefined) showToast("메모 저장됨 ✓");
+      pushUnit(bIdx, uIdx, fields);
+      const buildings = prev.buildings.map((b,bi)=> bi!==bIdx ? b : {
+        ...b, units: b.units.map((u,ui)=> ui!==uIdx ? u : {...u,...fields})
+      });
+      return {...prev, buildings};
+    });
+  };
+
+  const handleToggleDone = (buildingId) => {
+    const ds=todayStr();
+    setData(prev=>{
+      const bIdx = prev.buildings.findIndex(b=>b.id===buildingId);
+      const b = prev.buildings[bIdx];
+      const nowDone = !b.doneDate;
+      showToast(nowDone ? b.dong+" 완료 ("+ds+")" : b.dong+" 미완료로 변경");
+      pushBuilding(bIdx, {doneDate: nowDone ? ds : null});
+      const buildings = prev.buildings.map((b,i)=> i!==bIdx ? b : {...b, doneDate: nowDone?ds:null});
+      return {...prev, buildings};
+    });
+  };
+
+  const handleBookmark = (buildingId) => {
+    setData(prev=>{
+      const bIdx = prev.buildings.findIndex(b=>b.id===buildingId);
+      const b = prev.buildings[bIdx];
+      pushBuilding(bIdx, {bookmarked: !b.bookmarked});
+      const buildings = prev.buildings.map((b,i)=> i!==bIdx ? b : {...b, bookmarked:!b.bookmarked});
+      return {...prev, buildings};
+    });
+  };
+
+  const handleToggleAll = () => {
+    const ds=todayStr();
+    setData(prev=>{
+      const allDone = prev.buildings.every(b=>!!b.doneDate);
+      showToast(allDone?"전체 미완료로 변경":"전체 완료 처리 ✓");
+      const buildings = prev.buildings.map(b=>({...b, doneDate: allDone?null:ds}));
+      pushAllBuildings(buildings);
+      return {...prev, buildings};
+    });
+  };
+
+  // ── 로딩
+  if(!data) return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",gap:16,background:"#F2F5FA"}}>
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#1A3A6B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}>
+        <path d="M21 12a9 9 0 11-6.219-8.56"/>
+      </svg>
+      <p style={{fontSize:14,color:"#4A6FA5",fontWeight:600}}>Firebase 연결 중...</p>
+      {!IS_CONFIGURED&&<p style={{fontSize:12,color:"#E74C3C",marginTop:-8}}>⚠️ firebaseConfig를 설정해주세요</p>}
+    </div>
+  );
+
+  const totalUnits = data.buildings.reduce((s,b)=>s+b.units.length,0);
+  const doneUnits  = data.buildings.reduce((s,b)=>s+b.units.filter(u=>u.status!=="unvisited").length,0);
+  const progress   = Math.round((doneUnits/totalUnits)*100);
+  const allDone    = data.buildings.every(b=>!!b.doneDate);
+  const latestDone = data.buildings.map(b=>b.doneDate).filter(Boolean).sort().reverse()[0]||null;
+
+  const syncUI = {
+    live:       {text:"실시간 동기화",   bg:"#F0FBF4", color:"#27AE60"},
+    offline:    {text:"오프라인",        bg:"#FEF0EE", color:"#E74C3C"},
+    connecting: {text:"연결 중...",      bg:"#F8F9FB", color:"#8A93A3"},
+    demo:       {text:"데모 모드",       bg:"#FFF9EE", color:"#E67E22"},
+  }[fbStatus];
+
+  return(
+    <div onClick={()=>setOpenDropdownId(null)} style={{maxWidth:420,margin:"0 auto",height:"100vh",background:"#F2F5FA",fontFamily:"'Apple SD Gothic Neo','Noto Sans KR',sans-serif",position:"relative",display:"flex",flexDirection:"column"}}>
+
+      {/* Header */}
+      <div style={{background:"white",borderBottom:"1px solid #EEF0F5",boxShadow:scrolled?"0 2px 12px rgba(0,0,0,.08)":"none",flexShrink:0,zIndex:10}}>
+
+        {/* 동기화 상태 바 */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"4px 0",background:syncUI.bg}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:syncUI.color,animation:fbStatus==="live"?"pulse 2s infinite":"none"}}/>
+          <span style={{fontSize:10,fontWeight:600,color:syncUI.color}}>{syncUI.text}</span>
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",padding:scrolled?"10px 20px":"20px 20px 0",gap:10}}>
+          <div style={{width:scrolled?28:36,height:scrolled?28:36,borderRadius:"50%",background:"linear-gradient(135deg,#1A3A6B,#4A90D9)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .25s"}}>
+            <span style={{color:"white",fontSize:scrolled?14:18,fontWeight:900}}>{data.stepNumber}</span>
+          </div>
+          <span style={{fontSize:scrolled?16:13,fontWeight:800,color:scrolled?"#1A1D23":"#1A3A6B",flex:scrolled?1:"unset",transition:"all .25s"}}>
+            {scrolled?data.complexName:data.label}
+          </span>
+          {!scrolled&&<span style={{background:"#EBF4FF",color:"#1A3A6B",fontSize:13,fontWeight:700,padding:"4px 12px",borderRadius:20}}>{data.label}</span>}
+          {scrolled&&(
+            <>
+              <span style={{fontSize:11,color:"#8A93A3"}}>{doneUnits}/{totalUnits}</span>
+              <button onClick={e=>{e.stopPropagation();handleToggleAll();}} style={{
+                display:"flex",alignItems:"center",gap:5,padding:"5px 12px 5px 10px",borderRadius:20,cursor:"pointer",border:"none",
+                background:allDone?"linear-gradient(135deg,#27AE60,#1E8449)":"linear-gradient(135deg,#1A3A6B,#4A90D9)",
+                color:"white",fontSize:11,fontWeight:700,
+              }}>
+                {allDone?<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>:<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/></svg>}
+                {allDone?"완료됨":"전체완료"}
+              </button>
+            </>
+          )}
+        </div>
+
+        {!scrolled&&(
+          <div style={{padding:"0 20px 16px",animation:"fadeInDown .2s ease"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginTop:8}}>
+              <div>
+                <h1 style={{fontSize:22,fontWeight:900,color:"#1A1D23",margin:"0 0 2px",letterSpacing:"-0.5px"}}>{data.complexName}</h1>
+                <p style={{fontSize:12,color:"#8A93A3",margin:0}}>최근방문: {latestDone||"없음"}</p>
+              </div>
+              <button onClick={e=>{e.stopPropagation();handleToggleAll();}} style={{
+                display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:22,cursor:"pointer",border:"none",
+                background:allDone?"linear-gradient(135deg,#27AE60,#1E8449)":"linear-gradient(135deg,#1A3A6B,#4A90D9)",
+                color:"white",fontSize:12,fontWeight:800,flexShrink:0,
+                boxShadow:allDone?"0 3px 12px rgba(39,174,96,.4)":"0 3px 12px rgba(26,58,107,.35)",
+              }}>
+                {allDone?<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 3"/></svg>}
+                {allDone?"전체 완료됨":"전체 완료"}
+              </button>
+            </div>
+            <div style={{marginTop:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                <span style={{fontSize:12,color:"#4A6FA5",fontWeight:600}}>전체 진행률</span>
+                <span style={{fontSize:12,color:"#1A3A6B",fontWeight:700}}>{doneUnits}/{totalUnits} ({progress}%)</span>
+              </div>
+              <div style={{height:6,background:"#EEF0F5",borderRadius:3}}>
+                <div style={{width:progress+"%",height:"100%",background:"linear-gradient(90deg,#4A90D9,#27AE60)",borderRadius:3,transition:"width .4s ease"}}/>
+              </div>
+            </div>
+          </div>
+        )}
+        {scrolled&&<div style={{height:3,background:"#EEF0F5"}}><div style={{width:progress+"%",height:"100%",background:"linear-gradient(90deg,#4A90D9,#27AE60)",transition:"width .4s ease"}}/></div>}
+      </div>
+
+      {/* Body */}
+      <div ref={bodyRef} style={{padding:"16px",paddingBottom:80,overflowY:"auto",flex:1}}>
+        <NaverMap/>
+        <div style={{background:"white",borderRadius:16,boxShadow:"0 2px 12px rgba(0,0,0,.07)",padding:"14px 16px",marginBottom:16,textAlign:"center"}}>
+          <p style={{fontSize:12,fontWeight:700,color:"#4A6FA5",marginBottom:6}}>1. 주소</p>
+          {data.addresses.map((a,i)=>(
+            <p key={i} style={{fontSize:13,color:"#3D4450",lineHeight:1.7,margin:0}}><strong>{a.name}:</strong> {a.address}</p>
+          ))}
+        </div>
+        {data.buildings.map((building,idx)=>(
+          <BuildingCard key={building.id} building={building}
+            onUnitUpdate={handleUnitUpdate} onToggleDone={handleToggleDone} onBookmark={handleBookmark}
+            openDropdownId={openDropdownId} setOpenDropdownId={setOpenDropdownId}
+            stackIndex={data.buildings.length-idx}
+          />
+        ))}
+      </div>
+
+      {/* Toast */}
+      {toast&&(
+        <div style={{position:"fixed",bottom:74,left:"50%",transform:"translateX(-50%)",background:"#1A3A6B",color:"white",padding:"10px 24px",borderRadius:30,fontSize:13,fontWeight:600,boxShadow:"0 4px 20px rgba(26,58,107,.35)",animation:"fadeIn .2s ease",zIndex:300,whiteSpace:"nowrap"}}>
+          {toast}
+        </div>
+      )}
+
+      {/* Tab Bar */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:420,background:"white",borderTop:"1px solid #E8EBF0",boxShadow:"0 -4px 20px rgba(0,0,0,.07)",display:"flex",alignItems:"stretch",paddingBottom:"env(safe-area-inset-bottom,0px)",zIndex:40}}>
+        {[
+          {label:"홈",    active:false,icon:c=><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>},
+          {label:"목록",  active:true, icon:c=><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 9h8M8 13h5"/></svg>},
+          {label:"통계",  active:false,icon:c=><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>},
+          {label:"내정보",active:false,icon:c=><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>},
+        ].map(item=>{
+          const color=item.active?"#1A3A6B":"#B0B8C8";
+          return(
+            <button key={item.label} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"10px 0 12px",position:"relative"}}>
+              {item.active&&<div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",width:32,height:3,background:"#1A3A6B",borderRadius:"0 0 4px 4px"}}/>}
+              {item.icon(color)}
+              <span style={{fontSize:10,fontWeight:item.active?700:500,color,letterSpacing:"-0.2px"}}>{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
